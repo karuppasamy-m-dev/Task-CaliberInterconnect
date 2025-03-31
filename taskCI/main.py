@@ -126,7 +126,6 @@ class DataScreen(Screen):
 
     def clear_data_on_back(self, instance):
         self.data = []  # Clears the data
-        self.search_input = ""
         self.layout.clear_widgets()  # Optional: Clears the layout widgets
         self.manager.current = 'upload_screen'  # Switches to the upload screen
 
@@ -161,39 +160,6 @@ class DataScreen(Screen):
     def filter_data(self, instance, text):
         filtered_data = [row for row in self.data if any(text.lower() in str(value).lower() for value in row.values())]
         self.create_table(filtered_data)
-
-    def on_url_click(self, instance):
-        # Display image in a new screen or dialog when the URL is clicked
-        image_url = instance.text
-        self.display_image(image_url)
-
-    def display_image(self, image_url):
-        # Open a new screen to show the image
-        image_screen = ImageScreen(image_url)
-        self.manager.add_widget(image_screen)
-        self.manager.current = image_screen.name
-
-
-class ImageScreen(Screen):
-    def __init__(self, image_url, **kwargs):
-        super().__init__(**kwargs)
-        self.image_url = image_url
-        layout = BoxLayout(orientation='vertical', spacing=10, padding=20)
-
-        self.img = Image(source=image_url)
-        layout.add_widget(self.img)
-
-        back_button = MDRaisedButton(
-            text="Back",
-            pos_hint={"center_x": 0.5},
-            on_release=self.go_back
-        )
-        layout.add_widget(back_button)
-        self.add_widget(layout)
-
-    def go_back(self, instance):
-        self.manager.current = 'data_screen'
-
 
 # Main App
 class MyApp(MDApp):
