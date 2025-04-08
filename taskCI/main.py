@@ -1,3 +1,4 @@
+from kivy.uix.scrollview import ScrollView
 from kivymd.app import MDApp
 from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
@@ -9,7 +10,10 @@ from kivymd.uix.boxlayout import MDBoxLayout
 from kivymd.uix.button import MDRaisedButton
 from kivymd.uix.label import MDLabel
 from kivymd.uix.filemanager import MDFileManager
-from kivy.uix.image import Image
+from kivy.uix.image import Image, AsyncImage
+from kivy.core.image import Image as CoreImage
+from kivy.uix.image import Image as KivyImage
+from io import BytesIO
 import requests
 import json
 
@@ -101,7 +105,13 @@ class DataScreen(Screen):
         self.search_input.bind(text=self.filter_data)
         self.table = None
         self.data = []  # Store full dataset
-
+        self.selected_rows = []
+        self.show_image_btn = MDRaisedButton(
+            text="Show Image",
+            size_hint=(1, 0.1),
+            disabled=True,
+            on_release=self.go_to_image_screen
+        )
         self.layout.add_widget(self.search_input)
         self.add_widget(self.layout)
 
@@ -121,6 +131,7 @@ class DataScreen(Screen):
 
             if self.data:
                 self.create_table(self.data)
+                self.layout.add_widget(self.show_image_btn)
             else:
                 self.layout.add_widget(Button(text="No data available"))
 
@@ -152,14 +163,99 @@ class DataScreen(Screen):
             size_hint=(1, 0.9),
             use_pagination=True,
             column_data=column_data,
-            row_data=row_data
+            row_data=row_data,
+            check=True
         )
-
+        self.table.bind(on_check_press=self.on_check_press)
         self.layout.add_widget(self.table)
 
     def filter_data(self, instance, text):
         filtered_data = [row for row in self.data if any(text.lower() in str(value).lower() for value in row.values())]
         self.create_table(filtered_data)
+
+    def on_check_press(self, instance_table, current_row):
+        # Toggle selection
+        if current_row in self.selected_rows:
+            self.selected_rows.remove(current_row)
+        else:
+            self.selected_rows.append(current_row)
+
+        # Enable button only if something is selected
+        self.show_image_btn.disabled = not self.selected_rows
+
+    def go_to_image_screen(self, instance):
+        image_screen = self.manager.get_screen('image_screen')
+        image_screen.display_images(self.selected_rows)
+        self.manager.current = 'image_screen'
+
+
+class ImageScreen(Screen):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.layout = BoxLayout(orientation='vertical')
+        self.scroll = ScrollView(size_hint=(1, 0.9))
+        self.image_layout = BoxLayout(orientation='vertical', size_hint_y=None)
+        self.image_layout.bind(minimum_height=self.image_layout.setter('height'))
+        self.scroll.add_widget(self.image_layout)
+
+        self.back_imbutton = MDRaisedButton(
+            text="Back",
+            size_hint=(1, 0.1),
+            on_release=self.go_back
+        )
+
+        self.layout.add_widget(self.scroll)
+        self.layout.add_widget(self.back_imbutton)
+        self.add_widget(self.layout)
+
+    def display_images(self, selected_rows):
+        self.image_layout.clear_widgets()
+
+        for row in selected_rows:
+            for cell in row:
+                # Remove Kivy markup if present
+                #if isinstance(cell, str):
+                 #   cell_cleaned = cell.replace('[color=#0000FF]', '').replace('[/color]', '').strip()
+                  #  if cell_cleaned.lower().endswith(('.jpg', '.jpeg', '.png', '.gif')):
+                   #     img_url = f"{FLASK_SERVER}{cell_cleaned}" if cell_cleaned.startswith(
+                    #        "/") else f"{FLASK_SERVER}/images/{cell_cleaned}"
+                     #   print("Loading image from:", img_url)
+                      #  self.image_layout.add_widget(AsyncImage(source=img_url, size_hint_y=None, height=300))
+                if isinstance(cell, str):
+                    cell_cleaned = cell.replace('[color=#0000FF]', '').replace('[/color]', '').strip()
+                    if cell_cleaned.lower().endswith(('.jpg', '.jpeg', '.png', '.gif')):
+                        img_url = f"{FLASK_SERVER}{cell_cleaned}" if cell_cleaned.startswith(
+                            "/") else f"{FLASK_SERVER}/images/{cell_cleaned}"
+
+                        self.image_layout.add_widget(MDLabel(
+                            text=cell_cleaned,
+                            halign="center",
+                            theme_text_color="Primary",
+                            size_hint_y=None,
+                            height=30
+                        ))
+
+                        if cell_cleaned.lower().endswith('.gif'):
+                            try:
+                                response = requests.get(img_url)
+                                if response.status_code == 200:
+                                    data = BytesIO(response.content)
+                                    gif = KivyImage(anim_delay=0.1)
+                                    gif.texture = CoreImage(data, ext='gif', anim_delay=0.1).texture
+                                    gif.size_hint_y = None
+                                    gif.height = 300
+                                    self.image_layout.add_widget(gif)
+                            except Exception as e:
+                                print(f"Error loading gif: {e}")
+                        else:
+                            self.image_layout.add_widget(AsyncImage(source=img_url, size_hint_y=None, height=300))
+
+    def go_back(self, instance):
+        data_screen = self.manager.get_screen('data_screen')
+        data_screen.selected_rows = []
+        data_screen.show_image_btn.disabled = True
+        self.manager.current = 'data_screen'
+
 
 # Main App
 class MyApp(MDApp):
@@ -167,6 +263,7 @@ class MyApp(MDApp):
         sm = ScreenManager()
         sm.add_widget(FileUploadScreen(name='upload_screen'))
         sm.add_widget(DataScreen(name='data_screen'))
+        sm.add_widget(ImageScreen(name='image_screen'))
         return sm
 
 
